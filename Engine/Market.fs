@@ -12,6 +12,7 @@ type Market(id:int) =
     let unfilledSellsByOdds = SortedDictionary<decimal, ResizeArray<int>>({ new IComparer<decimal> with member _.Compare(d1, d2) = d2.CompareTo(d1) })
     let buys = ResizeArray<Buy>()
     let buysByBettor = Dictionary<int, ResizeArray<int>>()
+    let exposures = Dictionary<int, decimal>()
 
     let toBetResponses bettorId indexes =
         let toBetResponse bettorId buy =
@@ -31,11 +32,15 @@ type Market(id:int) =
                     | Sell (req, ch) -> 
                         if req.Amount > 0M then
                             autoIncSellId <- autoIncSellId + 1
-                            let sell = { Odds = req.Odds; Amount = req.Amount; Filled = 0M; ParticipantId = req.ParticipantId }
+                            let sell = { Odds = req.Odds; Amount = req.Amount; Filled = 0M; SellerId = req.ParticipantId }
                             sells.Add(autoIncSellId, sell)
                             if unfilledSellsByOdds.ContainsKey(sell.Odds) |> not then
                                 unfilledSellsByOdds.[sell.Odds] <- ResizeArray()
                             unfilledSellsByOdds.[sell.Odds].Add autoIncSellId
+                            let potentialLoss = (sell.Odds - 1M) * sell.Amount
+                            match exposures.TryGetValue(sell.SellerId) with
+                            | true, exposure -> exposures.[sell.SellerId] <- exposure + potentialLoss
+                            | false, _ -> exposures.[sell.SellerId] <- potentialLoss
                             Ok autoIncSellId
                         else
                             Error "Sell amount must be greater than 0"
@@ -55,12 +60,12 @@ type Market(id:int) =
                                 if wanted < available then
                                     buy.Filled <- buy.Amount
                                     sells.[sellId].Filled <- sells.[sellId].Filled + wanted
-                                    buy.Sells.Add (sell.ParticipantId, wanted)
+                                    buy.Sells.Add (sell.SellerId, wanted)
                                 else
                                     buy.Filled <- buy.Filled + available
                                     sellIds.Remove sellId |> ignore
                                     sells.Remove sellId |> ignore
-                                    buy.Sells.Add (sell.ParticipantId, available)
+                                    buy.Sells.Add (sell.SellerId, available)
 
                             if sellIds.Count = 0 then unfilledSellsByOdds.Remove odds |> ignore
 
@@ -92,12 +97,12 @@ type Market(id:int) =
                         | false, _ -> UnableToRemove NotFound                        
                         |> Ok |> ch.Reply
 
-                    | GetBets (_marketId, participantId, ch) ->
-                        if participantId <> 0 then
-                            match buysByBettor.TryGetValue participantId with
+                    | GetBets (_marketId, bettorId, ch) ->
+                        if bettorId <> 0 then
+                            match buysByBettor.TryGetValue bettorId with
                             | true, bettorBuys ->
                                 bettorBuys
-                                |> toBetResponses participantId
+                                |> toBetResponses bettorId
                                 |> Seq.toList
                             | false, _ -> []
                             |> Ok
@@ -107,6 +112,13 @@ type Market(id:int) =
                             |> Seq.collect (fun (bettorId, bettorBuys) -> toBetResponses bettorId bettorBuys)
                             |> Seq.toList
                             |> Ok
+                        |> ch.Reply
+
+                    | GetExposure (_marketId, sellerId, ch) ->
+                        match exposures.TryGetValue sellerId with
+                        | true, exposure -> exposure
+                        | false, _ -> 0M
+                        |> Ok
                         |> ch.Reply
 
                     | _ -> failwith $"Invalid/Unhandled Message {m}"
@@ -127,4 +139,6 @@ type Market(id:int) =
 
     member _.RemoveSell sellId = send (fun ch -> RemoveSell (id, sellId, ch))
     
-    member _.GetBets participantId = send (fun ch -> GetBets (id, participantId, ch))
+    member _.GetBets bettorId = send (fun ch -> GetBets (id, bettorId, ch))
+
+    member _.GetExposure sellerId = send (fun ch -> GetExposure (id, sellerId, ch))

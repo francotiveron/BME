@@ -63,8 +63,14 @@ type BmeController (engine : Engine) =
         go send recv
 
     [<HttpGet>][<Route("[action]")>]
-    member x.ShowBets([<FromQuery>]req: ShowBetsRequest) = 
-        let send () = engine.GetBets req.MarketId req.ParticipantId
+    member x.ShowBets([<FromQuery>]marketId, [<FromQuery>]bettorId) = 
+        let send () = engine.GetBets marketId bettorId
         let recv (response: ShowBetsResponse list) = 
             response |> List.mapi (fun i rsp -> $"Bet {i + 1} - Market {rsp.MarketId}: Seller {rsp.SellerId} must pay bettor {rsp.BettorId} a payout of {rsp.Amount * rsp.Odds:C} ({rsp.Amount:C} invested at {rsp.Odds:C2})" )
+        go send recv
+
+    [<HttpGet>][<Route("[action]")>]
+    member x.ShowExposure([<FromQuery>]marketId, [<FromQuery>]sellerId) = 
+        let send () = engine.GetExposure marketId sellerId
+        let recv (exposure: decimal) = exposure
         go send recv

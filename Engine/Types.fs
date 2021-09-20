@@ -11,7 +11,7 @@ type SellRequest = {
 type Sell = {
     Odds: decimal
     Amount: decimal
-    ParticipantId: int
+    SellerId: int
     mutable Filled: decimal
 }
 
@@ -35,12 +35,6 @@ type BuyResponse = {
     Amount: decimal
 }
 
-[<CLIMutable>]
-type ShowBetsRequest = {
-    MarketId: int
-    ParticipantId: int
-}
-
 type ShowBetsResponse = {
     MarketId: int
     SellerId: int
@@ -58,7 +52,8 @@ type Message =
     | Buy of BuyRequest * AsyncReplyChannel<Result<decimal * decimal, string>>
     | GetOrders of marketId:int * AsyncReplyChannel<Result<(int * Sell) list, string>>
     | RemoveSell of marketId:int * sellId:int * AsyncReplyChannel<Result<RemoveResponse, string>>
-    | GetBets of marketId:int * participantId:int * AsyncReplyChannel<Result<ShowBetsResponse list, string>>
+    | GetBets of marketId:int * bettorId:int * AsyncReplyChannel<Result<ShowBetsResponse list, string>>
+    | GetExposure of marketId:int * sellerId:int * AsyncReplyChannel<Result<decimal, string>>
 
 module Sell = 
     let composeFullId marketId sellId = $"{marketId}-{sellId}"

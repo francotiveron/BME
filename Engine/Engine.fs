@@ -30,7 +30,8 @@ type Engine() =
                     | Buy (req, ch) -> do! go req.MarketId (fun market -> market.Buy req) ch
                     | GetOrders (marketId, ch) -> do! go marketId (fun market -> market.GetOrders()) ch
                     | RemoveSell (marketId, sellId, ch) -> do! go marketId (fun market -> market.RemoveSell sellId) ch
-                    | GetBets (marketId, participantId, ch) -> do! go marketId (fun market -> market.GetBets participantId) ch
+                    | GetBets (marketId, bettorId, ch) -> do! go marketId (fun market -> market.GetBets bettorId) ch
+                    | GetExposure (marketId, sellerId, ch) -> do! go marketId (fun market -> market.GetExposure sellerId) ch
                     | _ -> failwith $"Invalid/Unhandled Message {m}"
                 with _ -> () //Todo
                 return! loop()
@@ -69,6 +70,8 @@ type Engine() =
             | Error msg -> async { return Error msg }
     }
 
-    member _.GetBets marketId participantId = 
-        if marketId <> 0 then send (fun ch -> GetBets (marketId, participantId, ch))
-        else getBetsInAllMarkets participantId
+    member _.GetBets marketId bettorId = 
+        if marketId <> 0 then send (fun ch -> GetBets (marketId, bettorId, ch))
+        else getBetsInAllMarkets bettorId
+
+    member _.GetExposure marketId sellerId = send (fun ch -> GetExposure (marketId, sellerId, ch))

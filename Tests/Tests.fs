@@ -23,12 +23,19 @@ module private Utilities =
         Assert.Equal(expected, returned)
     }
 
-let checkBets (controller: BmeController) marketId participantId expected = async {
-    let! ret = controller.ShowBets { MarketId = marketId; ParticipantId = participantId }
-    let result = Assert.IsType<OkObjectResult>(ret)
-    let returned = Assert.IsType<string list>(result.Value)
-    Assert.Equal<string>(expected, returned)
-}
+    let checkBets (controller: BmeController) marketId bettorId expected = async {
+        let! ret = controller.ShowBets(marketId, bettorId)
+        let result = Assert.IsType<OkObjectResult>(ret)
+        let returned = Assert.IsType<string list>(result.Value)
+        Assert.Equal<string>(expected, returned)
+    }
+
+    let checkExposure (controller: BmeController) marketId sellerId expected = async {
+        let! ret = controller.ShowExposure(marketId, sellerId)
+        let result = Assert.IsType<OkObjectResult>(ret)
+        let returned = Assert.IsType<decimal>(result.Value)
+        Assert.Equal(expected, returned)
+    }
 
 [<Fact>]
 let ``01 - can add markets`` () = async {
@@ -285,4 +292,32 @@ let ``12 - can get bets for all bettors in all markets`` () = async {
         "Bet 3 - Market 3: Seller 1 must pay bettor 5 a payout of $4,400.00 ($4,000.00 invested at $1.10)"
         ] 
         |> check 0 0
+}
+
+[<Fact>]
+let ``13 - can account for seller exposure`` () = async {
+    let engine = Engine()
+    let controller = BmeController(engine)
+
+    let! market = controller.AddMarket()
+
+    let! _ = controller.SellABet { Odds = 1.1M; Amount = 1000M; ParticipantId = 1; MarketId = market }
+    let! _ = controller.SellABet { Odds = 1.05M; Amount = 1000M; ParticipantId = 1; MarketId = market }
+
+    let! _ = controller.SellABet { Odds = 1.2M; Amount = 1000M; ParticipantId = 2; MarketId = market }
+    let! _ = controller.SellABet { Odds = 1.25M; Amount = 1000M; ParticipantId = 2; MarketId = market }
+
+    let! _ = controller.BuyABet { Amount = 100M; ParticipantId = 3; MarketId = market }
+    let! _ = controller.BuyABet { Amount = 200M; ParticipantId = 4; MarketId = market }
+    let! _ = controller.BuyABet { Amount = 300M; ParticipantId = 5; MarketId = market }
+    let! _ = controller.BuyABet { Amount = 400M; ParticipantId = 6; MarketId = market }
+    let! _ = controller.BuyABet { Amount = 500M; ParticipantId = 7; MarketId = market }
+
+    let res1 = controller.ShowExposure(1, 1)
+    let res2 = controller.ShowExposure(1, 2)
+
+    let check = checkExposure controller 1
+
+    do! check 1 150M
+    do! check 2 450M
 }
